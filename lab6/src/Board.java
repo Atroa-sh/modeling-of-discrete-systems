@@ -1,0 +1,311 @@
+import java.awt.Color;
+import java.awt.Graphics;
+import java.awt.Insets;
+import java.awt.event.ComponentEvent;
+import java.awt.event.ComponentListener;
+import java.awt.event.MouseEvent;
+import java.util.ArrayList;
+
+
+import javax.swing.JComponent;
+import javax.swing.event.MouseInputListener;
+
+public class Board extends JComponent implements MouseInputListener, ComponentListener {
+	private static final long serialVersionUID = 1L;
+	private Point[][] points;
+	private final int size = 10;
+	public String editType="0";
+	private int iterNum = 0;
+	public final int alarmTime = 20;
+	public Board(int length, int height) {
+		addMouseListener(this);
+		addComponentListener(this);
+		addMouseMotionListener(this);
+		setBackground(Color.WHITE);
+		setOpaque(true);
+	}
+
+	public void iteration() {
+		iterNum++;
+		if(iterNum==alarmTime){
+			updateBoard();
+		}
+		for (int x = 1; x < points.length - 1; ++x)
+			for (int y = 1; y < points[x].length - 1; ++y)
+				points[x][y].blocked=false;
+		for (int x = 1; x < points.length - 1; ++x)
+			for (int y = 1; y < points[x].length - 1; ++y)
+				points[x][y].move();
+		this.repaint();
+	}
+	private void updateBoard(){
+		for (int x = 1; x < points.length - 1; ++x)
+			for (int y = 1; y < points[x].length - 1; ++y){
+				Point currentPoint = points[x][y];
+				currentPoint.clear();
+				if(currentPoint.isPedestrian && (currentPoint.willBeObstacle || currentPoint.willBeExit))currentPoint.isPedestrian=false;
+				if(currentPoint.willBeExit){
+					currentPoint.type=2;
+					currentPoint.willBeExit=false;
+				}
+				else if(currentPoint.willBeObstacle){
+					currentPoint.type=1;
+					currentPoint.willBeObstacle=false;
+				}
+
+			}
+		calculateField();
+		this.repaint();
+	}
+
+	public void clear() {
+		for (int x = 0; x < points.length; ++x)
+			for (int y = 0; y < points[x].length; ++y) {
+				points[x][y].clear();
+			}
+		calculateField();
+		this.repaint();
+	}
+
+	private void initialize(int length, int height) {
+		points = new Point[length][height];
+
+		for (int x = 0; x < points.length; ++x)
+			for (int y = 0; y < points[x].length; ++y)
+				points[x][y] = new Point();
+
+		for (int x = 1; x < points.length-1; ++x) {
+			for (int y = 1; y < points[x].length-1; ++y) {
+				for(int h = -1 ; h < 2 ; h++){
+					for(int w = -1 ; w < 2 ; w++){
+						if(x + w < points.length && x + w > 0 && y + h < points[x].length && y + h > 0 && !(w==0 && h==0)
+						&& (Math.abs(w)+Math.abs(h))!=2 //commented line -> Moore neighbourhood else von Neumann
+						){
+							points[x][y].addNeighbor(points[x + w][y + h]);
+						}
+					}
+				}
+			}
+		}	
+	}
+	
+	private void calculateField(){
+		ArrayList<Point> toCheck =new ArrayList<>();
+		for (int x = 0; x < points.length; ++x){
+			for (int y = 0; y < points[x].length; ++y){
+				if(points[x][y].type==2){
+					Point currentPoint = points[x][y];
+					currentPoint.staticField=0;
+					for(int i = 0 ; i < currentPoint.neighbors.size() ; i++){
+						if(currentPoint.type!=1)toCheck.add(currentPoint.neighbors.get(i));
+					}
+
+				}
+				
+			}
+		}
+		while (!toCheck.isEmpty()){
+			Point currentPoint=toCheck.get(0);
+			if(currentPoint.calcStaticField()){
+				toCheck.addAll(currentPoint.neighbors);
+			}
+			toCheck.remove(currentPoint);
+		}
+
+	}
+
+	protected void paintComponent(Graphics g) {
+		if (isOpaque()) {
+			g.setColor(getBackground());
+			g.fillRect(0, 0, this.getWidth(), this.getHeight());
+		}
+		g.setColor(Color.GRAY);
+		drawNetting(g, size);
+	}
+
+	private void drawNetting(Graphics g, int gridSpace) {
+		Insets insets = getInsets();
+		int firstX = insets.left;
+		int firstY = insets.top;
+		int lastX = this.getWidth() - insets.right;
+		int lastY = this.getHeight() - insets.bottom;
+
+		int x = firstX;
+		while (x < lastX) {
+			g.drawLine(x, firstY, x, lastY);
+			x += gridSpace;
+		}
+
+		int y = firstY;
+		while (y < lastY) {
+			g.drawLine(firstX, y, lastX, y);
+			y += gridSpace;
+		}
+
+		for (x = 1; x < points.length-1; ++x) {
+			for (y = 1; y < points[x].length-1; ++y) {
+				if(points[x][y].type==0 && !points[x][y].isPedestrian && !points[x][y].willBeExit && !points[x][y].willBeObstacle ){
+					float staticField = points[x][y].staticField;
+					float intensity = staticField/100;
+					if (intensity > 1.0) {
+						intensity = 1.0f;
+					}
+					g.setColor(new Color(intensity, intensity,intensity ));
+				}
+				else if (points[x][y].type==1){
+					g.setColor(new Color(1.0f, 0.0f, 0.0f, 0.7f));
+					if (points[x][y].willBeObstacle){
+						g.setColor(new Color(1.0f, 0.0f, 0.0f, 0.9f));
+					}
+					else if (points[x][y].willBeExit){
+						g.setColor(new Color(1.0f, 0.5f, 0.0f, 0.4f));
+					}
+				}
+				else if (points[x][y].type==2){
+					g.setColor(new Color(0.0f, 1.0f, 0.0f, 0.7f));
+					if (points[x][y].willBeObstacle){
+						g.setColor(new Color(0.5f, 1.0f, 0.0f, 0.4f));
+					}
+					else if (points[x][y].willBeExit){
+						g.setColor(new Color(0.0f, 1.0f, 0.0f, 0.9f));
+					}
+				}
+				else if (points[x][y].isPedestrian){
+					g.setColor(new Color(0.0f, 0.0f, 1.0f, 0.7f));
+				}
+				else if (points[x][y].willBeExit){
+
+					g.setColor(new Color(0.0f, 1.0f, 0.0f, 0.4f));
+				}
+				else if (points[x][y].willBeObstacle){
+					g.setColor(new Color(1.0f, 0.0f, 0.0f, 0.4f));
+				}
+				g.fillRect((x * size) + 1, (y * size) + 1, (size - 1), (size - 1));
+			}
+		}
+
+	}
+
+	public void mouseClicked(MouseEvent e) {
+		int x = e.getX() / size;
+		int y = e.getY() / size;
+		if ((x < points.length) && (x > 0) && (y < points[x].length) && (y > 0)) {
+			if(editType.equals("empty cell")){
+				points[x][y].type= 0;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+				points[x][y].isPedestrian=false;
+
+			}
+			else if(editType.equals("wall")){
+				points[x][y].type= 1;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+				points[x][y].isPedestrian=false;
+
+			}
+			else if(editType.equals("exit")){
+				points[x][y].type= 2;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+				points[x][y].isPedestrian=false;
+
+			}
+			else if(editType.equals("pedestrian")){
+				points[x][y].isPedestrian=true;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+
+			}
+			else if(editType.equals("future exit")){
+				points[x][y].willBeExit=true;
+				points[x][y].willBeObstacle=false;
+
+
+			}
+			else if(editType.equals("future wall")){
+				points[x][y].willBeObstacle=true;
+				points[x][y].willBeExit=false;
+
+			}
+			this.repaint();
+		}
+	}
+
+	public void componentResized(ComponentEvent e) {
+		int dlugosc = (this.getWidth() / size) + 1;
+		int wysokosc = (this.getHeight() / size) + 1;
+		initialize(dlugosc, wysokosc);
+	}
+
+	public void mouseDragged(MouseEvent e) {
+		int x = e.getX() / size;
+		int y = e.getY() / size;
+		if ((x < points.length) && (x > 0) && (y < points[x].length) && (y > 0)) {
+			if(editType.equals("empty cell")){
+				points[x][y].type= 0;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+				points[x][y].isPedestrian=false;
+
+			}
+			else if(editType.equals("wall")){
+				points[x][y].type= 1;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+				points[x][y].isPedestrian=false;
+
+			}
+			else if(editType.equals("exit")){
+				points[x][y].type= 2;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+				points[x][y].isPedestrian=false;
+
+			}
+			else if(editType.equals("pedestrian")){
+				points[x][y].isPedestrian=true;
+				points[x][y].willBeObstacle=false;
+				points[x][y].willBeExit=false;
+
+			}
+			else if(editType.equals("future exit")){
+				points[x][y].willBeExit=true;
+				points[x][y].willBeObstacle=false;
+
+
+			}
+			else if(editType.equals("future wall")){
+				points[x][y].willBeObstacle=true;
+				points[x][y].willBeExit=false;
+
+			}
+			this.repaint();
+		}
+	}
+
+	public void mouseExited(MouseEvent e) {
+	}
+
+	public void mouseEntered(MouseEvent e) {
+	}
+
+	public void componentShown(ComponentEvent e) {
+	}
+
+	public void componentMoved(ComponentEvent e) {
+	}
+
+	public void mouseReleased(MouseEvent e) {
+	}
+
+	public void mouseMoved(MouseEvent e) {
+	}
+
+	public void componentHidden(ComponentEvent e) {
+	}
+
+	public void mousePressed(MouseEvent e) {
+	}
+
+}
